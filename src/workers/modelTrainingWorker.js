@@ -164,6 +164,26 @@ async function trainModel({ users }) {
             // A representação matemática (vetor) deste produto computada pela função encodeProduct
             // O .dataSync() pede ao TensorFlow para descer a sua variável tipo Tensor e
             // devolver os números de forma síncrona em um Array simples do Javascript.
+            // 
+            // Exemplo do que será retornado:
+            // [
+            //   // 1º Posição (PREÇO): Normalizado de 0 a 1 e multiplicado pelo peso de importância (0.2)
+            //   0.10,   // (ex: 55 reais está bem no meio entre 10 e 100, x 0.2 de Peso da feature "preço")
+            //   
+            //   // 2º Posição (IDADE): Normalizada de 0 a 1 e multiplicada pelo peso de importância (0.1)
+            //   0.05,   // (ex: 34 anos está na metade entre 18 e 50 anos, x 0.1 de Peso da feature "idade")
+            // 
+            //   // 3º, 4º e 5º Posição (CATEGORIA): One-Hot Encoding das Categorias ['Roupas', 'Eletrônicos'].
+            //   // Como é Roupa, a primeira casa ganha o Peso (0.4) e o resto ganha Zero.
+            //   0.4, 
+            //   0.0, 
+            // 
+            //   // 6º, 7º e 8º Posição (COR): One-Hot Encoding das Cores ['Azul', 'Vermelho', 'Preto']
+            //   // Como é Vermelho, a cor do MEIO ganha o Peso (0.3) e as outras ganham Zero.
+            //   0.0, 
+            //   0.3, 
+            //   0.0
+            // ]
             vector: encodeProduct(product, context).dataSync()
         }
     })
