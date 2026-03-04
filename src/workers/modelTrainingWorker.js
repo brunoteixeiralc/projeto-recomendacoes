@@ -1,5 +1,6 @@
 import 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js';
 import { workerEvents } from '../events/constants.js';
+import { normalize } from '../utils/math.js';
 
 console.log('Model training worker initialized');
 let _globalCtx = {};
@@ -10,8 +11,6 @@ const WEIGHT = {
     price: 0.2,
     age: 0.1,
 };
-
-const normalize = (value, min, max) => (value - min) / ((max - min) || 1)
 
 function makeContext(users, catalog) {
     // Cria um array só com as idades de todos os usuários

@@ -5,8 +5,8 @@
     "main": "index.js",
     "type": "module",
     "scripts": {
-        "start": "browser-sync -w . --server --files 'index.html, data/*.json, js/*.js' --port 3000",
-        "test": "echo \"Error: no test specified\" && exit 1"
+        "start": "browser-sync -w . --server --files 'index.html, data/*.json, src/**/*.js' --port 3000",
+        "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest"
     },
     "keywords": [
         "ecommerce",
@@ -17,6 +17,8 @@
     "author": "",
     "license": "ISC",
     "devDependencies": {
-        "browser-sync": "^3.0.4"
+        "browser-sync": "^3.0.4",
+        "cross-env": "^10.1.0",
+        "jest": "^30.2.0"
     }
 }
