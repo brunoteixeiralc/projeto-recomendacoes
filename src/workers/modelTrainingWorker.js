@@ -4,6 +4,13 @@ import { workerEvents } from '../events/constants.js';
 console.log('Model training worker initialized');
 let _globalCtx = {};
 
+const WEIGHT = {
+    category: 0.4,
+    color: 0.3,
+    price: 0.2,
+    age: 0.1,
+};
+
 const normalize = (value, min, max) => (value - min) / ((max - min) || 1)
 
 function makeContext(users, catalog) {
@@ -70,8 +77,6 @@ function makeContext(users, catalog) {
         })
     )
 
-    debugger
-
     return {
         catalog,
         // Também retorna a base de usuários recebida na função
@@ -95,13 +100,80 @@ function makeContext(users, catalog) {
     }
 }
 
+const oneHotWeighted = (index, length, weight) =>
+    // Cria um array de zeros com um único '1' na posição indicada (One-Hot Encoding).
+    // Converte esse array para número decimal (float32) e multiplica pelo peso de importância da característica.
+    tf.oneHot(index, length).cast('float32').mul(weight)
+
+function encodeProduct(product, context) {
+    const price = tf.tensor1d([
+        normalize(
+            product.price,
+            context.minPrice,
+            context.maxPrice
+        ) * WEIGHT.price
+    ])
+
+    const age = tf.tensor1d([
+        (
+            // Busca a idade média (normalizada de 0 a 1) do público que compra este produto.
+            // Se o produto nunca foi vendido, recebe um valor neutro padrão de 0.5 (idade média do catálogo).
+            // O valor final é multiplicado pelo peso de importância ('WEIGHT.age') que essa métrica tem.
+            context.productAvgAgeNorm[product.name] ?? 0.5
+        ) * WEIGHT.age
+    ])
+
+    const category = oneHotWeighted(
+        context.categoryIndex[product.category],
+        context.numCategories,
+        WEIGHT.category
+    )
+
+    const color = oneHotWeighted(
+        context.colorIndex[product.color],
+        context.numColors,
+        WEIGHT.color
+    )
+
+    // tf.concat1d empilha e junta todos os sub-vetores que criamos num único Array longo do Tensor.
+    // O resultado disso é a representação integral de "1 produto" em uma lista de números!
+    return tf.concat1d([price, age, category, color])
+}
+
 async function trainModel({ users }) {
+    // Registra no console do navegador que o treinamento do modelo se iniciou e mostra a base de usuários recebida
     console.log('Training model with users:', users)
+
+    // Envia uma mensagem de volta para o resto da aplicação indicando que o processo está na metade (50%)
     postMessage({ type: workerEvents.progressUpdate, progress: { progress: 50 } });
 
+    // Baixa o arquivo 'products.json' e converte a resposta de JSON para um array Javascript
     const catalog = await fetch('/data/products.json').then(res => res.json());
+
+    // Cria o "contexto" usando a nossa função makeContext() que extrai cálculos matemáticos da base
+    // como idades médias, preços mínimos e máximos e os índices pra o One-Hot Encoding
     const context = makeContext(users, catalog);
 
+    // Cria uma nova propriedade no contexto chamada productVector, mapeando cada produto pra um formato novo
+    context.productVector = catalog.map(product => {
+        return {
+            // Nome do produto
+            name: product.name,
+            // Cópia de todos os dados originais desse produto (meta dados)
+            meta: { ...product },
+            // A representação matemática (vetor) deste produto computada pela função encodeProduct
+            // O .dataSync() pede ao TensorFlow para descer a sua variável tipo Tensor e
+            // devolver os números de forma síncrona em um Array simples do Javascript.
+            vector: encodeProduct(product, context).dataSync()
+        }
+    })
+
+    debugger
+
+    // Salva todo esse contexto calculado para uso global dentro deste worker (útil pra recomendação depois)
+    _globalCtx = context
+
+    // Simula o disparo de um evento de log de treinamento, como se uma "Rodada" (Epoch) tivesse terminado
     postMessage({
         type: workerEvents.trainingLog,
         epoch: 1,
@@ -109,12 +181,13 @@ async function trainModel({ users }) {
         accuracy: 1
     });
 
+    // Usa um setTimeout pra simular um processo de finalização de treinamento demorado de 1 segundo
     setTimeout(() => {
+        // Envia mensagem indicando 100% de progresso
         postMessage({ type: workerEvents.progressUpdate, progress: { progress: 100 } });
+        // Sinaliza para a aplicação principal que o treinamento inteiro acabou
         postMessage({ type: workerEvents.trainingComplete });
     }, 1000);
-
-
 }
 function recommend(user, ctx) {
     console.log('will recommend for user:', user)
