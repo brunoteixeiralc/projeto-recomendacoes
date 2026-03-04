@@ -11,6 +11,7 @@
   <img alt="TensorFlow.js" src="https://img.shields.io/badge/TensorFlow.js-FF6F00?style=for-the-badge&logo=tensorflow&logoColor=white">
   <img alt="HTML5" src="https://img.shields.io/badge/html5-%23E34F26.svg?style=for-the-badge&logo=html5&logoColor=white">
   <img alt="CSS3" src="https://img.shields.io/badge/css3-%231572B6.svg?style=for-the-badge&logo=css3&logoColor=white">
+  <img alt="Jest" src="https://img.shields.io/badge/-jest-%23C21325?style=for-the-badge&logo=jest&logoColor=white">
 </p>
 
 <hr>
@@ -51,6 +52,16 @@ Certifique-se de ter o [Node.js](https://nodejs.org/) instalado.
    ```
 
 A página será aberta automaticamente via Browser-Sync (geralmente na porta `3000`), fazendo _live-reloading_ caso algum arquivo seja alterado.
+
+## 🧪 Testes Automatizados
+
+O projeto conta com testes unitários focados na confiabilidade de funções matemáticas essenciais para a Engenharia de Features do TensorFlow.
+
+Para rodar a suíte de testes com **Jest**:
+
+```bash
+npm run test
+```
 
 ## 🗂 Estrutura de Diretórios
 ```bash
