@@ -349,6 +349,11 @@ async function trainModel({ users }) {
 
     const trainData = createTrainingData(context)
     _model = await configureNeuralNetAndTrain(trainData)
+
+    // Envia mensagem indicando 100% de progresso
+    postMessage({ type: workerEvents.progressUpdate, progress: { progress: 100 } });
+    // Sinaliza para a aplicação principal que o treinamento inteiro acabou
+    postMessage({ type: workerEvents.trainingComplete });
 }
 function recommend(user, ctx) {
     console.log('will recommend for user:', user)
