@@ -4,6 +4,7 @@ import { normalize } from '../utils/math.js';
 
 console.log('Model training worker initialized');
 let _globalCtx = {};
+let _model = {};
 
 const WEIGHT = {
     category: 0.4,
@@ -160,30 +161,32 @@ function createTrainingData(context) {
     const labels = []
 
     // Para cada usuário na base de dados...
-    context.users.forEach(user => {
-        // Extrai o vetor matemático que representa o perfil deste usuário (baseado no que ele comprou no passado)
-        // O '.dataSync()' transforma o "Tensor" do TensorFlow em um simples array de números do Javascript
-        const userVector = encodeUser(user, context).dataSync()
+    context.users
+        .filter(u => u.purchases.length)
+        .forEach(user => {
+            // Extrai o vetor matemático que representa o perfil deste usuário (baseado no que ele comprou no passado)
+            // O '.dataSync()' transforma o "Tensor" do TensorFlow em um simples array de números do Javascript
+            const userVector = encodeUser(user, context).dataSync()
 
-        // Agora cruzamos o perfil deste usuário com TODOS os produtos disponíveis no catálogo da loja...
-        context.products.forEach(product => {
-            // Pega o vetor matemático que representa as características exclusivas deste produto
-            const productVector = encodeProduct(product, context).dataSync()
+            // Agora cruzamos o perfil deste usuário com TODOS os produtos disponíveis no catálogo da loja...
+            context.products.forEach(product => {
+                // Pega o vetor matemático que representa as características exclusivas deste produto
+                const productVector = encodeProduct(product, context).dataSync()
 
-            // Verifica se este usuário comprou ou não este produto analisando o seu histórico.
-            // O '.some()' percorre as compras do usuário e retorna 'true' (sim) ou 'false' (não).
-            const label = user.purchases.some(
-                purchase => purchase.name == product.name ? 1 : 0
-            )
+                // Verifica se este usuário comprou ou não este produto analisando o seu histórico.
+                // O '.some()' percorre as compras do usuário e retorna 'true' (sim) ou 'false' (não).
+                const label = user.purchases.some(
+                    purchase => purchase.name == product.name ? 1 : 0
+                )
 
-            // Junta o array do perfil do usuário e o array do produto num único array (concatenação).
-            // Isso representa o cenário "Este Usuário + Este Produto" (o que a rede neural fará a análise).
-            inputs.push([...userVector, ...productVector])
+                // Junta o array do perfil do usuário e o array do produto num único array (concatenação).
+                // Isso representa o cenário "Este Usuário + Este Produto" (o que a rede neural fará a análise).
+                inputs.push([...userVector, ...productVector])
 
-            // Guarda a resposta real se houve compra (true) ou não (false), para a rede neural poder aprender.
-            labels.push(label)
-        })
-    });
+                // Guarda a resposta real se houve compra (true) ou não (false), para a rede neural poder aprender.
+                labels.push(label)
+            })
+        });
 
     // Ao final, criamos e retornamos os Tensores Bidimensionais do TensorFlow com as matrizes finais prontas
     return {
@@ -198,6 +201,99 @@ function createTrainingData(context) {
         // Como juntamos 1 vetor de Usuário e 1 vetor de Produto (que têm os mesmos tamanhos), multiplicamos por 2
         inputDimensions: context.dimensions * 2
     }
+}
+
+async function configureNeuralNetAndTrain(trainData) {
+    // 1. Inicializa o modelo da Rede Neural.
+    // 'sequential' significa que as camadas da rede serão empilhadas uma após a outra (como uma linha de montagem).
+    // A informação vai entrar pela primeira camada, ser processada e repassada para a próxima.
+    const model = tf.sequential()
+
+    // 2. Adiciona a PRIMEIRA camada oculta e, implicitamente, a camada de "Entrada" dos dados
+    model.add(
+        tf.layers.dense({
+            // 'inputShape': Define exatamente o tamanho da nossa "Pergunta" (matriz com o Usuário + Produto).
+            // O TensorFlow precisa saber com antecedência quantas "features" (colunas) vai receber da base.
+            inputShape: [trainData.inputDimensions],
+            // 'units': Quantidade de "Neurônios" artificiais nesta camada (128). 
+            // Quanto mais neurônios, mais padrões complexos ela consegue memorizar (porém mais lenta fica).
+            units: 128,
+            // 'activation': 'relu' (Rectified Linear Unit) zera valores negativos e deixa passar os positivos.
+            // Ajuda a rede a focar apenas nas características que importam e a cortar o "ruído matemático".
+            activation: 'relu'
+        })
+    )
+
+    // 3. Adiciona a SEGUNDA camada (Camadas Densas / Hidden Layers)
+    // Recebe o processamento dos 128 neurônios anteriores e tenta encontrar padrões mais profundos.
+    model.add(
+        tf.layers.dense({
+            // 'units': Vai afunilando a informação, condensando de 128 neurônios para 64.
+            units: 64,
+            activation: 'relu'
+        })
+    )
+
+    // 4. Adiciona a TERCEIRA camada
+    // Afunila mais ainda a informação, condensando agora para 32 neurônios.
+    // Esse processo de afunilamento força a rede a extrair apenas o conhecimento puro que mais importa.
+    model.add(
+        tf.layers.dense({
+            units: 32,
+            activation: 'relu'
+        })
+    )
+
+    // 5. Adiciona a QUARTA e ÚLTIMA camada (Camada de Saída / Output Layer)
+    // É esta camada que vai dar o "veredicto final" sobre a propensão de compra.
+    model.add(
+        tf.layers.dense({
+            // 'units': Apenas 1 neurônio de saída. Porque nós só queremos 1 única resposta final (Sim ou Não).
+            units: 1,
+            // 'activation': 'sigmoid'. Essa é a grande jogada matemática da camada de saída final:
+            // A curva 'sigmoid' esmaga o resultado da rede para caber ESPECIFICAMENTE entre 0.0 e 1.0.
+            // Logo, se a saída for 0.99, significa 99% de chance de recomendação. Se for 0.01 = 1%.
+            activation: 'sigmoid'
+        })
+    )
+
+    // 6. Prepara ("Compila") o modelo acabado de montar, informando como ele deve aprender com os erros.
+    model.compile({
+        // 'optimizer': O 'adam' é o algoritmo escolhido para ajustar os pesos ("sinapses") após cada erro. 
+        // 0.01 é a taxa de aprendizado (learning rate). Um valor equilibrado para não aprender irresponsávelmente rápido e nem muito devagar.
+        optimizer: tf.train.adam(0.01),
+        // 'loss': A função para calcular a "dor" de quanto o modelo errou o gabarito. 
+        // 'binaryCrossentropy' é a métrica padrão ouro quando o nosso objetivo final é apenas "Sim" vs "Não".
+        loss: 'binaryCrossentropy',
+        // 'metrics': O que nós queremos exibir na tela para acompanhar o treinamento dele (percentual de acertos).
+        metrics: ['accuracy']
+    })
+
+    // 7. Finalmente, chuta a bola pro gol e INICIA O TREINAMENTO usando nossas matrizes geradas.
+    // 'await': O treinamento leva segundos ou minutos, o processador vai ficar bloqueado e precisamos usar Promises.
+    await model.fit(trainData.xs, trainData.ys, {
+        // 'epochs': Quantas vezes a rede vai iterar pela BASE INTEIRA do zero pra tentar melhorar o aprendizado (100 vezes)
+        epochs: 100,
+        // 'batchSize': A rede estuda "lotes" de 32 cruzamentos(usuário+produto) por vez, ajusta os pesos, e parte pro próximo lote.
+        batchSize: 32,
+        // 'shuffle': Muito importante! Embaralha a ordem da nossa tabela a cada 'Epoch', pro modelo não "decorar" e viciar a ordem das respostas.
+        shuffle: true,
+        // 'callbacks': Funções bônus para disparar a cada etapa do treinamento:
+        callbacks: {
+            // Ao final de cada 'Epoch' (quando terminar as 100 rodadas na base)...
+            onEpochEnd: (epoch, logs) => {
+                postMessage({
+                    type: workerEvents.trainingLog,
+                    epoch: epoch,
+                    loss: logs.loss,
+                    accuracy: logs.acc
+                });
+            }
+        }
+    })
+
+    // (Atenção: A instrução return model estava comentada/ausente no seu código prévio, mantive omitido fielmente,
+    //  mas o comum seria ter um 'return model' aqui para que a variável fora da função o receba corretamente!)
 }
 
 async function trainModel({ users }) {
@@ -252,23 +348,7 @@ async function trainModel({ users }) {
     _globalCtx = context
 
     const trainData = createTrainingData(context)
-    debugger
-
-    // Simula o disparo de um evento de log de treinamento, como se uma "Rodada" (Epoch) tivesse terminado
-    postMessage({
-        type: workerEvents.trainingLog,
-        epoch: 1,
-        loss: 1,
-        accuracy: 1
-    });
-
-    // Usa um setTimeout pra simular um processo de finalização de treinamento demorado de 1 segundo
-    setTimeout(() => {
-        // Envia mensagem indicando 100% de progresso
-        postMessage({ type: workerEvents.progressUpdate, progress: { progress: 100 } });
-        // Sinaliza para a aplicação principal que o treinamento inteiro acabou
-        postMessage({ type: workerEvents.trainingComplete });
-    }, 1000);
+    _model = await configureNeuralNetAndTrain(trainData)
 }
 function recommend(user, ctx) {
     console.log('will recommend for user:', user)
