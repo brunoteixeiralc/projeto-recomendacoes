@@ -19,13 +19,16 @@
 ## 📖 Sobre o Projeto
 Este projeto experimental é um e-commerce em Vanilla JS com uma arquitetura modularizada (quase-MVC: Models/Data, Views, Controllers, Services e Workers). O seu grande diferencial é a **construção e treinamento on-the-fly de um modelo de Machine Learning** usando o `TensorFlow.js`. 
 
-O objetivo final do modelo (atualmente em desenvolvimento) é rodar em um Web Worker para fazer o *One-Hot Encoding* de variáveis como preços, categorias, cores e idades visando "aprender" o perfil do público de cada produto para **recomendar de forma personalizada novos produtos baseados na intersecção do que o usuário já comprou**.
+O objetivo final do modelo é rodar em um Web Worker para fazer o *One-Hot Encoding* de variáveis como preços, categorias, cores e idades visando "aprender" o perfil do público de cada produto para **recomendar de forma personalizada novos produtos baseados na intersecção do que o usuário já comprou**.
+
+**🤖 Inteligência Artificial no Desenvolvimento:** O código e a refatoração desta aplicação vêm sendo ativamente auxiliados e construídos em par com o modelo Claude (LLM).
 
 ## ✨ Funcionalidades
 - **Seleção de Perfil**: O usuário simula o acesso com um perfil (extraído de um `.json` de usuários) para acessar a plataforma.
 - **Histórico de Compras Tracking**: Rastreio do que o usuário clica e tenta "comprar", persistido em memória/session.
 - **Arquitetura Modular**: Implementação robusta de Controllers, Views independentes e injeção/comunicação guiada por Eventos.
-- **Inteligência Artificial (Em breve)**: Treinamento de Redes Neurais acontecendo silenciosamente em Background usando Service Workers sem travar a interface da aplicação (`src/workers/modelTrainingWorker.js`).
+- **Isolamento de Estado (OOP)**: O Worker que treina a IA utiliza o paradigma Orientado a Objetos (`RecommendationEngine`) para evitar vazamento do escopo global.
+- **Inteligência Artificial**: Treinamento de Redes Neurais acontecendo silenciosamente em Background usando Service Workers sem travar a interface da aplicação (`src/workers/modelTrainingWorker.js`).
 
 ## 🚀 Como Rodar Localmente
 
@@ -55,7 +58,7 @@ A página será aberta automaticamente via Browser-Sync (geralmente na porta `30
 
 ## 🧪 Testes Automatizados
 
-O projeto conta com testes unitários focados na confiabilidade de funções matemáticas essenciais para a Engenharia de Features do TensorFlow.
+O projeto conta com testes unitários focados na confiabilidade de funções matemáticas essenciais para a Engenharia de Features do TensorFlow, como normalização (`math.js`) e mapeamento do contexto de produtos baseados no histórico mockado (`dataProcessor.js`).
 
 Para rodar a suíte de testes com **Jest**:
 
@@ -72,9 +75,10 @@ npm run test
 ├── src/
 │   ├── controller/          # Regras de orquestração de Views e Services
 │   ├── events/              # Lógica de Pub/Sub e eventos internos  
-│   ├── service/             # Requisições Fetch assíncronas aos JSONs 
+│   ├── service/             # Requisições Fetch assíncronas aos JSONs
+│   ├── utils/               # Utilitários (como dataProcessor.js e math.js)
 │   ├── view/                # Manipulação de DOM / HTML 
-│   ├── workers/             # Web Workers (incluindo Treinamento TensorFlow.js)
+│   ├── workers/             # Web Workers (Onde a classe RecommendationEngine mora)
 │   └── index.js             # Entrypoint da Aplicação 
 ├── index.html               # Estrutura Main HTML
 ├── style.css                # Estilizacão Global
