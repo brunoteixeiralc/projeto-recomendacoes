@@ -36,7 +36,7 @@ Certifique-se de ter o [Node.js](https://nodejs.org/) instalado.
 
 1. Clone o repositório
    ```bash
-   git clone https://github.com/SEU_USUARIO/NOME_DO_REPOSITORIO.git
+   git clone https://github.com/SEU_USUARIO/projeto-recomendacoes.git
    ```
 
 2. Entre no diretório
