@@ -13,195 +13,96 @@ const WEIGHT = {
     age: 0.1,
 };
 
-function makeContext(users, products) {
-    // Cria um array só com as idades de todos os usuários
-    const age = users.map(u => u.age)
-    // Cria um array só com os preços de todos os produtos do catálogo
-    const prices = products.map(p => p.price)
-    // Encontra a menor idade entre todos os usuários
-    const minAge = Math.min(...age)
-    // Encontra a maior idade entre todos os usuários
-    const maxAge = Math.max(...age)
-    // Encontra o menor preço entre todos os produtos
-    const minPrice = Math.min(...prices)
-    // Encontra o maior preço entre todos os produtos
-    const maxPrice = Math.max(...prices)
-    // Extrai uma lista única (sem repetições) de todas as cores disponíveis no catálogo
-    // O 'Set' remove os duplicados, e o 'Array.from' transforma de volta em uma lista normal
-    const colors = Array.from(new Set(products.map(p => p.color)))
-    // Extrai uma lista única (sem repetições) de todas as categorias do catálogo
-    const categories = Array.from(new Set(products.map(p => p.category)))
+// ============================================================================
+// 1. ENTRY-POINT (Porta de Entrada do Worker)
+// ============================================================================
 
-    // Cria um dicionário (objeto) associando cada cor a um número (índice).
-    // Exemplo do resultado: { "Azul": 0, "Preto": 1, "Branco": 2 }
-    // O TensorFlow.js não entende strings ("Azul"), então precisamos converter textos para números.
-    const colorIndex = Object.fromEntries(
-        colors.map((color, index) => [color, index])
-    )
-    // Cria um dicionário associando cada categoria a um número (índice).
-    // Exemplo: { "Eletrônicos": 0, "Vestimenta": 1 }
-    const categoryIndex = Object.fromEntries(
-        categories.map((category, index) => [category, index])
-    )
-    // Calcula a idade média central, somando a máxima e a mínima e dividindo por 2
-    // Esse valor será usado para produtos que nunca foram comprados por ninguém
-    const midAge = (maxAge + minAge) / 2
-    // Objeto vazio que vai guardar a soma de todas as idades dos usuários que compraram cada produto
-    const ageSums = {}
-    // Objeto vazio que vai guardar a quantidade de vezes que cada produto foi comprado (para tirar a média depois)
-    const ageCounts = {}
-    // Percorre cada usuário
-    users.forEach(user => {
-        // Percorre cada compra desse usuário
-        user.purchases.forEach(purchase => {
-            // Soma a idade deste usuário ao total de idades do produto comprado
-            // Se o produto ainda não existir em 'ageSums', começa com 0 e soma a idade
-            ageSums[purchase.name] = (ageSums[purchase.name] || 0) + user.age
-            // Incrementa o contador de vendas deste produto. 
-            // Se ainda não existir em 'ageCounts', começa com 0 e soma 1
-            ageCounts[purchase.name] = (ageCounts[purchase.name] || 0) + 1
-        })
+const handlers = {
+    [workerEvents.trainModel]: trainModel,
+    [workerEvents.recommend]: d => recommend(d.user, _globalCtx),
+};
+
+self.onmessage = e => {
+    const { action, ...data } = e.data;
+    if (handlers[action]) handlers[action](data);
+};
+
+// ============================================================================
+// 2. ORQUESTRADORES PRINCIPAIS
+// ============================================================================
+
+async function trainModel({ users }) {
+    // Registra no console do navegador que o treinamento do modelo se iniciou e mostra a base de usuários recebida
+    console.log('Training model with users:', users)
+
+    // Envia uma mensagem de volta para o resto da aplicação indicando que o processo está na metade (50%)
+    postMessage({ type: workerEvents.progressUpdate, progress: { progress: 50 } });
+
+    // Baixa o arquivo 'products.json' e converte a resposta de JSON para um array Javascript
+    const products = await fetch('/data/products.json').then(res => res.json());
+
+    // Cria o "contexto" usando a nossa função makeContext() que extrai cálculos matemáticos da base
+    // como idades médias, preços mínimos e máximos e os índices pra o One-Hot Encoding
+    const context = makeContext(users, products);
+
+    // Cria uma nova propriedade no contexto chamada productVector, mapeando cada produto pra um formato novo
+    context.productVector = products.map(product => {
+        return {
+            // Nome do produto
+            name: product.name,
+            // Cópia de todos os dados originais desse produto (meta dados)
+            meta: { ...product },
+            // A representação matemática (vetor) deste produto computada pela função encodeProduct
+            // O .dataSync() pede ao TensorFlow para descer a sua variável tipo Tensor e
+            // devolver os números de forma síncrona em um Array simples do Javascript.
+            // 
+            // Exemplo do que será retornado:
+            // [
+            //   // 1º Posição (PREÇO): Normalizado de 0 a 1 e multiplicado pelo peso de importância (0.2)
+            //   0.10,   // (ex: 55 reais está bem no meio entre 10 e 100, x 0.2 de Peso da feature "preço")
+            //   
+            //   // 2º Posição (IDADE): Normalizada de 0 a 1 e multiplicada pelo peso de importância (0.1)
+            //   0.05,   // (ex: 34 anos está na metade entre 18 e 50 anos, x 0.1 de Peso da feature "idade")
+            // 
+            //   // 3º, 4º e 5º Posição (CATEGORIA): One-Hot Encoding das Categorias ['Roupas', 'Eletrônicos'].
+            //   // Como é Roupa, a primeira casa ganha o Peso (0.4) e o resto ganha Zero.
+            //   0.4, 
+            //   0.0, 
+            // 
+            //   // 6º, 7º e 8º Posição (COR): One-Hot Encoding das Cores ['Azul', 'Vermelho', 'Preto']
+            //   // Como é Vermelho, a cor do MEIO ganha o Peso (0.3) e as outras ganham Zero.
+            //   0.0, 
+            //   0.3, 
+            //   0.0
+            // ]
+            vector: encodeProduct(product, context).dataSync()
+        }
     })
 
-    // Cria um objeto final associando CAda produto a uma "idade média normalizada" do seu público
-    const productAvgAgeNorm = Object.fromEntries(
-        // Percorre todos os produtos do catálogo
-        products.map(product => {
-            // Calcula a média de idade de quem comprou o produto (Soma das Idades / Quantidade de Compras)
-            // Se o produto nunca foi comprado (ageCounts for 0 ou falso), usa a idade central ('midAge')
-            const avg = ageCounts[product.name] ? ageSums[product.name] / ageCounts[product.name] : midAge
+    // Salva todo esse contexto calculado para uso global dentro deste worker (útil pra recomendação depois)
+    _globalCtx = context
 
-            // Retorna um array [Nome do Produto, Valor Normalizado de 0 a 1]
-            // A normalização transforma a idade média num valor proporcional onde minAge = 0 e maxAge = 1
-            return [product.name, normalize(avg, minAge, maxAge)]
-        })
-    )
+    const trainData = createTrainingData(context)
+    _model = await configureNeuralNetAndTrain(trainData)
 
-    return {
-        products,
-        // Também retorna a base de usuários recebida na função
-        users,
-        productAvgAgeNorm,
-        minAge,
-        maxAge,
-        minPrice,
-        maxPrice,
-        colorIndex,
-        categoryIndex,
-        // Quantidade total de cores únicas (útil para criar tensores One-Hot Encoding)
-        numColors: colors.length,
-        // Quantidade total de categorias únicas
-        numCategories: categories.length,
-        // Quantidade total de Dimensões que o Modelo de Machine Learning vai receber como Input.
-        // A lógica é: 2 dimensões 'básicas' (Idade e Preço)
-        // Mais o número de Cores possíveis (ex: 5 cores = 5 dimensões com 1 onde a cor ocorre e 0 nas outras)
-        // Mais o número de Categorias possíveis (ex: 10 categorias = 10 dimensões extras)
-        dimensions: 2 + colors.length + categories.length
-    }
+    // Envia mensagem indicando 100% de progresso
+    postMessage({ type: workerEvents.progressUpdate, progress: { progress: 100 } });
+    // Sinaliza para a aplicação principal que o treinamento inteiro acabou
+    postMessage({ type: workerEvents.trainingComplete });
 }
 
-const oneHotWeighted = (index, length, weight) =>
-    // Cria um array de zeros com um único '1' na posição indicada (One-Hot Encoding).
-    // Converte esse array para número decimal (float32) e multiplica pelo peso de importância da característica.
-    tf.oneHot(index, length).cast('float32').mul(weight)
-
-function encodeProduct(product, context) {
-    const price = tf.tensor1d([
-        normalize(
-            product.price,
-            context.minPrice,
-            context.maxPrice
-        ) * WEIGHT.price
-    ])
-
-    const age = tf.tensor1d([
-        (
-            // Busca a idade média (normalizada de 0 a 1) do público que compra este produto.
-            // Se o produto nunca foi vendido, recebe um valor neutro padrão de 0.5 (idade média do catálogo).
-            // O valor final é multiplicado pelo peso de importância ('WEIGHT.age') que essa métrica tem.
-            context.productAvgAgeNorm[product.name] ?? 0.5
-        ) * WEIGHT.age
-    ])
-
-    const category = oneHotWeighted(
-        context.categoryIndex[product.category],
-        context.numCategories,
-        WEIGHT.category
-    )
-
-    const color = oneHotWeighted(
-        context.colorIndex[product.color],
-        context.numColors,
-        WEIGHT.color
-    )
-
-    // tf.concat1d empilha e junta todos os sub-vetores que criamos num único Array longo do Tensor.
-    // O resultado disso é a representação integral de "1 produto" em uma lista de números!
-    return tf.concat1d([price, age, category, color])
+function recommend(user, ctx) {
+    console.log('will recommend for user:', user)
+    // postMessage({
+    //     type: workerEvents.recommend,
+    //     user,
+    //     recommendations: []
+    // });
 }
 
-function encodeUser(user, context) {
-    if (user.purchases.length) {
-        return tf.stack(
-            user.purchases.map(
-                product => encodeProduct(product, context)
-            )
-        )
-            .mean(0)
-            .reshape([
-                1,
-                context.dimensions
-            ])
-    }
-}
-
-function createTrainingData(context) {
-    // Arrays para guardar as "perguntas" (features/inputs) e as "respostas corretas" (labels/resultados) do nosso treinamento
-    const inputs = []
-    const labels = []
-
-    // Para cada usuário na base de dados...
-    context.users
-        .filter(u => u.purchases.length)
-        .forEach(user => {
-            // Extrai o vetor matemático que representa o perfil deste usuário (baseado no que ele comprou no passado)
-            // O '.dataSync()' transforma o "Tensor" do TensorFlow em um simples array de números do Javascript
-            const userVector = encodeUser(user, context).dataSync()
-
-            // Agora cruzamos o perfil deste usuário com TODOS os produtos disponíveis no catálogo da loja...
-            context.products.forEach(product => {
-                // Pega o vetor matemático que representa as características exclusivas deste produto
-                const productVector = encodeProduct(product, context).dataSync()
-
-                // Verifica se este usuário comprou ou não este produto analisando o seu histórico.
-                // O '.some()' percorre as compras do usuário e retorna 'true' (sim) ou 'false' (não).
-                const label = user.purchases.some(
-                    purchase => purchase.name == product.name ? 1 : 0
-                )
-
-                // Junta o array do perfil do usuário e o array do produto num único array (concatenação).
-                // Isso representa o cenário "Este Usuário + Este Produto" (o que a rede neural fará a análise).
-                inputs.push([...userVector, ...productVector])
-
-                // Guarda a resposta real se houve compra (true) ou não (false), para a rede neural poder aprender.
-                labels.push(label)
-            })
-        });
-
-    // Ao final, criamos e retornamos os Tensores Bidimensionais do TensorFlow com as matrizes finais prontas
-    return {
-        // 'xs' simboliza o eixo X ou as Features: a nossa grande tabela com as junções de Usuário + Produto
-        xs: tf.tensor2d(inputs),
-
-        // 'ys' simboliza o eixo Y ou os Labels (Classificação): as respostas corretas de true/false para cada junção de cima.
-        // Convertidos num formato de coluna vertical: [num_linhas, 1_coluna]
-        ys: tf.tensor2d(labels, [labels.length, 1]),
-
-        // Guarda o número exato de dimensões (features) que estamos enviando pro modelo a cada "linha"
-        // Como juntamos 1 vetor de Usuário e 1 vetor de Produto (que têm os mesmos tamanhos), multiplicamos por 2
-        inputDimensions: context.dimensions * 2
-    }
-}
+// ============================================================================
+// 3. MODELO / INTELIGÊNCIA ARTIFICIAL
+// ============================================================================
 
 async function configureNeuralNetAndTrain(trainData) {
     // 1. Inicializa o modelo da Rede Neural.
@@ -296,81 +197,196 @@ async function configureNeuralNetAndTrain(trainData) {
     //  mas o comum seria ter um 'return model' aqui para que a variável fora da função o receba corretamente!)
 }
 
-async function trainModel({ users }) {
-    // Registra no console do navegador que o treinamento do modelo se iniciou e mostra a base de usuários recebida
-    console.log('Training model with users:', users)
+// ============================================================================
+// 4. FUNÇÕES AUXILIARES / PREPARAÇÃO DE DADOS MATEMÁTICOS
+// ============================================================================
 
-    // Envia uma mensagem de volta para o resto da aplicação indicando que o processo está na metade (50%)
-    postMessage({ type: workerEvents.progressUpdate, progress: { progress: 50 } });
+function createTrainingData(context) {
+    // Arrays para guardar as "perguntas" (features/inputs) e as "respostas corretas" (labels/resultados) do nosso treinamento
+    const inputs = []
+    const labels = []
 
-    // Baixa o arquivo 'products.json' e converte a resposta de JSON para um array Javascript
-    const products = await fetch('/data/products.json').then(res => res.json());
+    // Para cada usuário na base de dados...
+    context.users
+        .filter(u => u.purchases.length)
+        .forEach(user => {
+            // Extrai o vetor matemático que representa o perfil deste usuário (baseado no que ele comprou no passado)
+            // O '.dataSync()' transforma o "Tensor" do TensorFlow em um simples array de números do Javascript
+            const userVector = encodeUser(user, context).dataSync()
 
-    // Cria o "contexto" usando a nossa função makeContext() que extrai cálculos matemáticos da base
-    // como idades médias, preços mínimos e máximos e os índices pra o One-Hot Encoding
-    const context = makeContext(users, products);
+            // Agora cruzamos o perfil deste usuário com TODOS os produtos disponíveis no catálogo da loja...
+            context.products.forEach(product => {
+                // Pega o vetor matemático que representa as características exclusivas deste produto
+                const productVector = encodeProduct(product, context).dataSync()
 
-    // Cria uma nova propriedade no contexto chamada productVector, mapeando cada produto pra um formato novo
-    context.productVector = products.map(product => {
-        return {
-            // Nome do produto
-            name: product.name,
-            // Cópia de todos os dados originais desse produto (meta dados)
-            meta: { ...product },
-            // A representação matemática (vetor) deste produto computada pela função encodeProduct
-            // O .dataSync() pede ao TensorFlow para descer a sua variável tipo Tensor e
-            // devolver os números de forma síncrona em um Array simples do Javascript.
-            // 
-            // Exemplo do que será retornado:
-            // [
-            //   // 1º Posição (PREÇO): Normalizado de 0 a 1 e multiplicado pelo peso de importância (0.2)
-            //   0.10,   // (ex: 55 reais está bem no meio entre 10 e 100, x 0.2 de Peso da feature "preço")
-            //   
-            //   // 2º Posição (IDADE): Normalizada de 0 a 1 e multiplicada pelo peso de importância (0.1)
-            //   0.05,   // (ex: 34 anos está na metade entre 18 e 50 anos, x 0.1 de Peso da feature "idade")
-            // 
-            //   // 3º, 4º e 5º Posição (CATEGORIA): One-Hot Encoding das Categorias ['Roupas', 'Eletrônicos'].
-            //   // Como é Roupa, a primeira casa ganha o Peso (0.4) e o resto ganha Zero.
-            //   0.4, 
-            //   0.0, 
-            // 
-            //   // 6º, 7º e 8º Posição (COR): One-Hot Encoding das Cores ['Azul', 'Vermelho', 'Preto']
-            //   // Como é Vermelho, a cor do MEIO ganha o Peso (0.3) e as outras ganham Zero.
-            //   0.0, 
-            //   0.3, 
-            //   0.0
-            // ]
-            vector: encodeProduct(product, context).dataSync()
-        }
+                // Verifica se este usuário comprou ou não este produto analisando o seu histórico.
+                // O '.some()' percorre as compras do usuário e retorna 'true' (sim) ou 'false' (não).
+                const label = user.purchases.some(
+                    purchase => purchase.name == product.name ? 1 : 0
+                )
+
+                // Junta o array do perfil do usuário e o array do produto num único array (concatenação).
+                // Isso representa o cenário "Este Usuário + Este Produto" (o que a rede neural fará a análise).
+                inputs.push([...userVector, ...productVector])
+
+                // Guarda a resposta real se houve compra (true) ou não (false), para a rede neural poder aprender.
+                labels.push(label)
+            })
+        });
+
+    // Ao final, criamos e retornamos os Tensores Bidimensionais do TensorFlow com as matrizes finais prontas
+    return {
+        // 'xs' simboliza o eixo X ou as Features: a nossa grande tabela com as junções de Usuário + Produto
+        xs: tf.tensor2d(inputs),
+
+        // 'ys' simboliza o eixo Y ou os Labels (Classificação): as respostas corretas de true/false para cada junção de cima.
+        // Convertidos num formato de coluna vertical: [num_linhas, 1_coluna]
+        ys: tf.tensor2d(labels, [labels.length, 1]),
+
+        // Guarda o número exato de dimensões (features) que estamos enviando pro modelo a cada "linha"
+        // Como juntamos 1 vetor de Usuário e 1 vetor de Produto (que têm os mesmos tamanhos), multiplicamos por 2
+        inputDimensions: context.dimensions * 2
+    }
+}
+
+function encodeUser(user, context) {
+    if (user.purchases.length) {
+        return tf.stack(
+            user.purchases.map(
+                product => encodeProduct(product, context)
+            )
+        )
+            .mean(0)
+            .reshape([
+                1,
+                context.dimensions
+            ])
+    }
+}
+
+function encodeProduct(product, context) {
+    const price = tf.tensor1d([
+        normalize(
+            product.price,
+            context.minPrice,
+            context.maxPrice
+        ) * WEIGHT.price
+    ])
+
+    const age = tf.tensor1d([
+        (
+            // Busca a idade média (normalizada de 0 a 1) do público que compra este produto.
+            // Se o produto nunca foi vendido, recebe um valor neutro padrão de 0.5 (idade média do catálogo).
+            // O valor final é multiplicado pelo peso de importância ('WEIGHT.age') que essa métrica tem.
+            context.productAvgAgeNorm[product.name] ?? 0.5
+        ) * WEIGHT.age
+    ])
+
+    const category = oneHotWeighted(
+        context.categoryIndex[product.category],
+        context.numCategories,
+        WEIGHT.category
+    )
+
+    const color = oneHotWeighted(
+        context.colorIndex[product.color],
+        context.numColors,
+        WEIGHT.color
+    )
+
+    // tf.concat1d empilha e junta todos os sub-vetores que criamos num único Array longo do Tensor.
+    // O resultado disso é a representação integral de "1 produto" em uma lista de números!
+    return tf.concat1d([price, age, category, color])
+}
+
+const oneHotWeighted = (index, length, weight) =>
+    // Cria um array de zeros com um único '1' na posição indicada (One-Hot Encoding).
+    // Converte esse array para número decimal (float32) e multiplica pelo peso de importância da característica.
+    tf.oneHot(index, length).cast('float32').mul(weight)
+
+function makeContext(users, products) {
+    // Cria um array só com as idades de todos os usuários
+    const age = users.map(u => u.age)
+    // Cria um array só com os preços de todos os produtos do catálogo
+    const prices = products.map(p => p.price)
+    // Encontra a menor idade entre todos os usuários
+    const minAge = Math.min(...age)
+    // Encontra a maior idade entre todos os usuários
+    const maxAge = Math.max(...age)
+    // Encontra o menor preço entre todos os produtos
+    const minPrice = Math.min(...prices)
+    // Encontra o maior preço entre todos os produtos
+    const maxPrice = Math.max(...prices)
+    // Extrai uma lista única (sem repetições) de todas as cores disponíveis no catálogo
+    // O 'Set' remove os duplicados, e o 'Array.from' transforma de volta em uma lista normal
+    const colors = Array.from(new Set(products.map(p => p.color)))
+    // Extrai uma lista única (sem repetições) de todas as categorias do catálogo
+    const categories = Array.from(new Set(products.map(p => p.category)))
+
+    // Cria um dicionário (objeto) associando cada cor a um número (índice).
+    // Exemplo do resultado: { "Azul": 0, "Preto": 1, "Branco": 2 }
+    // O TensorFlow.js não entende strings ("Azul"), então precisamos converter textos para números.
+    const colorIndex = Object.fromEntries(
+        colors.map((color, index) => [color, index])
+    )
+    // Cria um dicionário associando cada categoria a um número (índice).
+    // Exemplo: { "Eletrônicos": 0, "Vestimenta": 1 }
+    const categoryIndex = Object.fromEntries(
+        categories.map((category, index) => [category, index])
+    )
+    // Calcula a idade média central, somando a máxima e a mínima e dividindo por 2
+    // Esse valor será usado para produtos que nunca foram comprados por ninguém
+    const midAge = (maxAge + minAge) / 2
+    // Objeto vazio que vai guardar a soma de todas as idades dos usuários que compraram cada produto
+    const ageSums = {}
+    // Objeto vazio que vai guardar a quantidade de vezes que cada produto foi comprado (para tirar a média depois)
+    const ageCounts = {}
+    // Percorre cada usuário
+    users.forEach(user => {
+        // Percorre cada compra desse usuário
+        user.purchases.forEach(purchase => {
+            // Soma a idade deste usuário ao total de idades do produto comprado
+            // Se o produto ainda não existir em 'ageSums', começa com 0 e soma a idade
+            ageSums[purchase.name] = (ageSums[purchase.name] || 0) + user.age
+            // Incrementa o contador de vendas deste produto. 
+            // Se ainda não existir em 'ageCounts', começa com 0 e soma 1
+            ageCounts[purchase.name] = (ageCounts[purchase.name] || 0) + 1
+        })
     })
 
-    // Salva todo esse contexto calculado para uso global dentro deste worker (útil pra recomendação depois)
-    _globalCtx = context
+    // Cria um objeto final associando CAda produto a uma "idade média normalizada" do seu público
+    const productAvgAgeNorm = Object.fromEntries(
+        // Percorre todos os produtos do catálogo
+        products.map(product => {
+            // Calcula a média de idade de quem comprou o produto (Soma das Idades / Quantidade de Compras)
+            // Se o produto nunca foi comprado (ageCounts for 0 ou falso), usa a idade central ('midAge')
+            const avg = ageCounts[product.name] ? ageSums[product.name] / ageCounts[product.name] : midAge
 
-    const trainData = createTrainingData(context)
-    _model = await configureNeuralNetAndTrain(trainData)
+            // Retorna um array [Nome do Produto, Valor Normalizado de 0 a 1]
+            // A normalização transforma a idade média num valor proporcional onde minAge = 0 e maxAge = 1
+            return [product.name, normalize(avg, minAge, maxAge)]
+        })
+    )
 
-    // Envia mensagem indicando 100% de progresso
-    postMessage({ type: workerEvents.progressUpdate, progress: { progress: 100 } });
-    // Sinaliza para a aplicação principal que o treinamento inteiro acabou
-    postMessage({ type: workerEvents.trainingComplete });
+    return {
+        products,
+        // Também retorna a base de usuários recebida na função
+        users,
+        productAvgAgeNorm,
+        minAge,
+        maxAge,
+        minPrice,
+        maxPrice,
+        colorIndex,
+        categoryIndex,
+        // Quantidade total de cores únicas (útil para criar tensores One-Hot Encoding)
+        numColors: colors.length,
+        // Quantidade total de categorias únicas
+        numCategories: categories.length,
+        // Quantidade total de Dimensões que o Modelo de Machine Learning vai receber como Input.
+        // A lógica é: 2 dimensões 'básicas' (Idade e Preço)
+        // Mais o número de Cores possíveis (ex: 5 cores = 5 dimensões com 1 onde a cor ocorre e 0 nas outras)
+        // Mais o número de Categorias possíveis (ex: 10 categorias = 10 dimensões extras)
+        dimensions: 2 + colors.length + categories.length
+    }
 }
-function recommend(user, ctx) {
-    console.log('will recommend for user:', user)
-    // postMessage({
-    //     type: workerEvents.recommend,
-    //     user,
-    //     recommendations: []
-    // });
-}
-
-
-const handlers = {
-    [workerEvents.trainModel]: trainModel,
-    [workerEvents.recommend]: d => recommend(d.user, _globalCtx),
-};
-
-self.onmessage = e => {
-    const { action, ...data } = e.data;
-    if (handlers[action]) handlers[action](data);
-};
