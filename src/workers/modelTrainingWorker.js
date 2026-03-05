@@ -12,11 +12,11 @@ const WEIGHT = {
     age: 0.1,
 };
 
-function makeContext(users, catalog) {
+function makeContext(users, products) {
     // Cria um array só com as idades de todos os usuários
     const age = users.map(u => u.age)
     // Cria um array só com os preços de todos os produtos do catálogo
-    const prices = catalog.map(p => p.price)
+    const prices = products.map(p => p.price)
     // Encontra a menor idade entre todos os usuários
     const minAge = Math.min(...age)
     // Encontra a maior idade entre todos os usuários
@@ -27,9 +27,9 @@ function makeContext(users, catalog) {
     const maxPrice = Math.max(...prices)
     // Extrai uma lista única (sem repetições) de todas as cores disponíveis no catálogo
     // O 'Set' remove os duplicados, e o 'Array.from' transforma de volta em uma lista normal
-    const colors = Array.from(new Set(catalog.map(p => p.color)))
+    const colors = Array.from(new Set(products.map(p => p.color)))
     // Extrai uma lista única (sem repetições) de todas as categorias do catálogo
-    const categories = Array.from(new Set(catalog.map(p => p.category)))
+    const categories = Array.from(new Set(products.map(p => p.category)))
 
     // Cria um dicionário (objeto) associando cada cor a um número (índice).
     // Exemplo do resultado: { "Azul": 0, "Preto": 1, "Branco": 2 }
@@ -65,7 +65,7 @@ function makeContext(users, catalog) {
     // Cria um objeto final associando CAda produto a uma "idade média normalizada" do seu público
     const productAvgAgeNorm = Object.fromEntries(
         // Percorre todos os produtos do catálogo
-        catalog.map(product => {
+        products.map(product => {
             // Calcula a média de idade de quem comprou o produto (Soma das Idades / Quantidade de Compras)
             // Se o produto nunca foi comprado (ageCounts for 0 ou falso), usa a idade central ('midAge')
             const avg = ageCounts[product.name] ? ageSums[product.name] / ageCounts[product.name] : midAge
@@ -77,7 +77,7 @@ function makeContext(users, catalog) {
     )
 
     return {
-        catalog,
+        products,
         // Também retorna a base de usuários recebida na função
         users,
         productAvgAgeNorm,
@@ -139,6 +139,67 @@ function encodeProduct(product, context) {
     return tf.concat1d([price, age, category, color])
 }
 
+function encodeUser(user, context) {
+    if (user.purchases.length) {
+        return tf.stack(
+            user.purchases.map(
+                product => encodeProduct(product, context)
+            )
+        )
+            .mean(0)
+            .reshape([
+                1,
+                context.dimensions
+            ])
+    }
+}
+
+function createTrainingData(context) {
+    // Arrays para guardar as "perguntas" (features/inputs) e as "respostas corretas" (labels/resultados) do nosso treinamento
+    const inputs = []
+    const labels = []
+
+    // Para cada usuário na base de dados...
+    context.users.forEach(user => {
+        // Extrai o vetor matemático que representa o perfil deste usuário (baseado no que ele comprou no passado)
+        // O '.dataSync()' transforma o "Tensor" do TensorFlow em um simples array de números do Javascript
+        const userVector = encodeUser(user, context).dataSync()
+
+        // Agora cruzamos o perfil deste usuário com TODOS os produtos disponíveis no catálogo da loja...
+        context.products.forEach(product => {
+            // Pega o vetor matemático que representa as características exclusivas deste produto
+            const productVector = encodeProduct(product, context).dataSync()
+
+            // Verifica se este usuário comprou ou não este produto analisando o seu histórico.
+            // O '.some()' percorre as compras do usuário e retorna 'true' (sim) ou 'false' (não).
+            const label = user.purchases.some(
+                purchase => purchase.name == product.name ? 1 : 0
+            )
+
+            // Junta o array do perfil do usuário e o array do produto num único array (concatenação).
+            // Isso representa o cenário "Este Usuário + Este Produto" (o que a rede neural fará a análise).
+            inputs.push([...userVector, ...productVector])
+
+            // Guarda a resposta real se houve compra (true) ou não (false), para a rede neural poder aprender.
+            labels.push(label)
+        })
+    });
+
+    // Ao final, criamos e retornamos os Tensores Bidimensionais do TensorFlow com as matrizes finais prontas
+    return {
+        // 'xs' simboliza o eixo X ou as Features: a nossa grande tabela com as junções de Usuário + Produto
+        xs: tf.tensor2d(inputs),
+
+        // 'ys' simboliza o eixo Y ou os Labels (Classificação): as respostas corretas de true/false para cada junção de cima.
+        // Convertidos num formato de coluna vertical: [num_linhas, 1_coluna]
+        ys: tf.tensor2d(labels, [labels.length, 1]),
+
+        // Guarda o número exato de dimensões (features) que estamos enviando pro modelo a cada "linha"
+        // Como juntamos 1 vetor de Usuário e 1 vetor de Produto (que têm os mesmos tamanhos), multiplicamos por 2
+        inputDimensions: context.dimensions * 2
+    }
+}
+
 async function trainModel({ users }) {
     // Registra no console do navegador que o treinamento do modelo se iniciou e mostra a base de usuários recebida
     console.log('Training model with users:', users)
@@ -147,14 +208,14 @@ async function trainModel({ users }) {
     postMessage({ type: workerEvents.progressUpdate, progress: { progress: 50 } });
 
     // Baixa o arquivo 'products.json' e converte a resposta de JSON para um array Javascript
-    const catalog = await fetch('/data/products.json').then(res => res.json());
+    const products = await fetch('/data/products.json').then(res => res.json());
 
     // Cria o "contexto" usando a nossa função makeContext() que extrai cálculos matemáticos da base
     // como idades médias, preços mínimos e máximos e os índices pra o One-Hot Encoding
-    const context = makeContext(users, catalog);
+    const context = makeContext(users, products);
 
     // Cria uma nova propriedade no contexto chamada productVector, mapeando cada produto pra um formato novo
-    context.productVector = catalog.map(product => {
+    context.productVector = products.map(product => {
         return {
             // Nome do produto
             name: product.name,
@@ -187,10 +248,11 @@ async function trainModel({ users }) {
         }
     })
 
-    debugger
-
     // Salva todo esse contexto calculado para uso global dentro deste worker (útil pra recomendação depois)
     _globalCtx = context
+
+    const trainData = createTrainingData(context)
+    debugger
 
     // Simula o disparo de um evento de log de treinamento, como se uma "Rodada" (Epoch) tivesse terminado
     postMessage({
