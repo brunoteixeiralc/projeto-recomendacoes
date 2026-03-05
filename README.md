@@ -21,8 +21,6 @@ Este projeto experimental é um e-commerce em Vanilla JS com uma arquitetura mod
 
 O objetivo final do modelo é rodar em um Web Worker para fazer o *One-Hot Encoding* de variáveis como preços, categorias, cores e idades visando "aprender" o perfil do público de cada produto para **recomendar de forma personalizada novos produtos baseados na intersecção do que o usuário já comprou**.
 
-**🤖 Inteligência Artificial no Desenvolvimento:** O código e a refatoração desta aplicação vêm sendo ativamente auxiliados e construídos em par com o modelo Claude (LLM).
-
 ## ✨ Funcionalidades
 - **Seleção de Perfil**: O usuário simula o acesso com um perfil (extraído de um `.json` de usuários) para acessar a plataforma.
 - **Histórico de Compras Tracking**: Rastreio do que o usuário clica e tenta "comprar", persistido em memória/session.
