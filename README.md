@@ -83,8 +83,30 @@ npm run test
 └── package.json            
 ```
 
-## 🧠 Lógica do TensorFlow.js
-A magia das recomendações acontecerá no `modelTrainingWorker.js`, o qual:
-1. Normaliza as idades e preços para Valores entre 0 e 1 calculando a "Média Ponderada" do público de um produto (`(Max - Min) / 2`).
-2. Faz transformações de *One-Hot Encoding* convertendo variáveis textuais categóricas (como *Azul*, *Verde*, *Eletrônicos*, *Vestuário*) em Múltiplas Dimensões/Arrays Binários, calculando também automaticamente o número de Dimensões a injetar na Rede Neural.
-3. Roda em uma Thread fora da janela principal (Web Worker) para que os eventuais lags de processamento/treino do Tensor não "engasquem" a interface de CSS e navegação do cliente.
+## 🧠 Lógica do TensorFlow.js (Passo a Passo)
+
+A inteligência do sistema reside no `modelTrainingWorker.js`, funcionando como um "cérebro isolado" em Background. Abaixo está o fluxo detalhado:
+
+### 1. Inicialização e Estrutura
+O processamento ocorre em um **Web Worker**, garantindo que a thread principal (UI) nunca trave durante cálculos pesados. A lógica é encapsulada na classe `RecommendationEngine`, que gerencia o estado do modelo e os pesos das características (Preço, Categoria, Cor e Idade).
+
+### 2. Preparação dos Dados (Feature Engineering)
+Antes do treino, o sistema realiza o pré-processamento:
+- **Carga:** Consome o catálogo de produtos e usuários.
+- **Vetorização (Embeddings):** Transforma produtos em vetores numéricos. Variáveis categóricas sofrem *One-Hot Encoding* e valores contínuos (preço/idade) são normalizados entre 0 e 1.
+- **Otimização:** Os vetores dos produtos são pré-calculados e armazenados em memória (`productsVector`) para acelerar as recomendações posteriores.
+
+### 3. Treinamento da Rede Neural
+- **Arquitetura:** Uma rede neural sequencial profunda com camadas densas (ReLU) e uma camada de saída Sigmoid para classificação binária.
+- **Aprendizado:** O modelo analisa o histórico: `Perfil do Usuário + Vetor do Produto = Sucesso (1) ou Falha (0)`.
+- **Iteração:** O treinamento ocorre por 100 épocas, ajustando pesos internos para prever a afinidade de compra.
+
+### 4. Ciclo de Recomendação
+Quando solicitado:
+- **Perfil do Usuário:** É gerado um vetor médio baseado nas compras anteriores. 
+- **Cold Start:** Se o usuário for novo, o sistema cria um perfil inicial baseado apenas na sua idade.
+- **Predição:** A rede neural compara o usuário com **cada** produto do catálogo simultaneamente.
+- **Ranking:** Os produtos são ordenados pelo *score* de afinidade devolvido pela IA e enviados de volta para a interface.
+
+### 5. Comunicação Assíncrona
+O Worker utiliza um sistema de `handlers` para responder a eventos (`trainModel`, `recommend`) e reporta logs de progresso e acurácia em tempo real para o console e interface.
