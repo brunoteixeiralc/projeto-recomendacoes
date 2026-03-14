@@ -90,22 +90,23 @@ A inteligência do sistema reside no `modelTrainingWorker.js`, funcionando como 
 ### 1. Inicialização e Estrutura
 O processamento ocorre em um **Web Worker**, garantindo que a thread principal (UI) nunca trave durante cálculos pesados. A lógica é encapsulada na classe `RecommendationEngine`, que gerencia o estado do modelo e os pesos das características (Preço, Categoria, Cor e Idade).
 
-### 2. Preparação dos Dados (Feature Engineering)
 Antes do treino, o sistema realiza o pré-processamento:
 - **Carga:** Consome o catálogo de produtos e usuários.
 - **Vetorização (Embeddings):** Transforma produtos em vetores numéricos. Variáveis categóricas sofrem *One-Hot Encoding* e valores contínuos (preço/idade) são normalizados entre 0 e 1.
 - **Otimização:** Os vetores dos produtos são pré-calculados e armazenados em memória (`productsVector`) para acelerar as recomendações posteriores.
 
-### 3. Treinamento da Rede Neural
-- **Arquitetura:** Uma rede neural sequencial profunda com camadas densas (ReLU) e uma camada de saída Sigmoid para classificação binária.
-- **Aprendizado:** O modelo analisa o histórico: `Perfil do Usuário + Vetor do Produto = Sucesso (1) ou Falha (0)`.
-- **Iteração:** O treinamento ocorre por 100 épocas, ajustando pesos internos para prever a afinidade de compra.
+### Passo a Passo da Lógica (TensorFlow.js)
 
-### 4. Ciclo de Recomendação
-Quando solicitado:
-- **Perfil do Usuário:** É gerado um vetor médio baseado nas compras anteriores. 
-- **Cold Start:** Se o usuário for novo, o sistema cria um perfil inicial baseado apenas na sua idade.
-- **Predição:** A rede neural compara o usuário com **cada** produto do catálogo simultaneamente.
+1.  **Inicialização do Motor:** O sistema carrega o catálogo de produtos e os perfis de usuários (com idade e sexo).
+2.  **Engenharia de Features (Vetorização):**
+    *   **Produtos:** São convertidos em vetores baseados em preço, cor, categoria e idade média dos compradores.
+    *   **Usuários:** O perfil é criado pela média dos produtos comprados **somada ao seu gênero (sexo)**.
+3.  **Rede Neural (Treinamento):** O modelo aprende a relação entre o vetor do usuário e a probabilidade de compra de cada produto.
+4.  **Ciclo de Recomendação:**
+    *   **Usuários Antigos:** A rede usa o histórico e o gênero para sugerir produtos parecidos.
+    *   **Novos Usuários (Cold Start):** Em vez de recomendações genéricas, o sistema usa a **idade e o sexo** informados para gerar uma predição personalizada imediata.
+5.  **Comunicação:** Tudo roda em um Web Worker, garantindo que o site não trave durante o processamento da IA.
+atálogo simultaneamente.
 - **Ranking:** Os produtos são ordenados pelo *score* de afinidade devolvido pela IA e enviados de volta para a interface.
 
 ### 5. Comunicação Assíncrona

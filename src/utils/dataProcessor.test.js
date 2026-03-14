@@ -5,8 +5,8 @@ describe('Data Processor Utils', () => {
     describe('makeContext()', () => {
         it('deve extrair metadados e limites matemáticos corretamente dos arrays de usuários e produtos', () => {
             const users = [
-                { age: 20, purchases: [{ name: 'Produto A' }, { name: 'Produto B' }] },
-                { age: 30, purchases: [{ name: 'Produto A' }] }
+                { age: 20, gender: 'masculino', purchases: [{ name: 'Produto A' }, { name: 'Produto B' }] },
+                { age: 30, gender: 'feminino', purchases: [{ name: 'Produto A' }] }
             ];
 
             const products = [
@@ -24,26 +24,26 @@ describe('Data Processor Utils', () => {
             expect(ctx.maxPrice).toBe(150);
 
             // Verificando contagem de Cores e Categorias Únicas
-            // Cores únicas: Azul e Vermelho (2)
             expect(ctx.numColors).toBe(2);
             expect(ctx.colorIndex['Azul']).toBeDefined();
             expect(ctx.colorIndex['Vermelho']).toBeDefined();
 
-            // Categorias únicas: Roupas e Calçados (2)
             expect(ctx.numCategories).toBe(2);
             expect(ctx.categoryIndex['Roupas']).toBeDefined();
             expect(ctx.categoryIndex['Calçados']).toBeDefined();
 
+            // Verificando contagem de Gêneros
+            expect(ctx.numGenders).toBe(2);
+            expect(ctx.genderIndex['masculino']).toBeDefined();
+            expect(ctx.genderIndex['feminino']).toBeDefined();
+
             // Verificando cálculo de Idades Normalizadas
-            // Produto A: Compradores têm 20 e 30 anos -> Média: 25. Normalizado entre 20 e 30 = 0.5 centralizado.
             expect(ctx.productAvgAgeNorm['Produto A']).toBe(0.5);
-            // Produto B: Comprador tem 20 anos -> Média 20. Normalizado = 0.
             expect(ctx.productAvgAgeNorm['Produto B']).toBe(0);
-            // Produto C: Nunca foi vendido -> Recebe a Média do catálogo (20 + 30 / 2) -> Média 25. Normalizado = 0.5.
             expect(ctx.productAvgAgeNorm['Produto C']).toBe(0.5);
 
-            // Dimensions da Rede Neural: (2 default) + (2 cores) + (2 categorias) = 6
-            expect(ctx.dimensions).toBe(6);
+            // Dimensions da Rede Neural: (2 default) + (2 cores) + (2 categorias) + (2 gêneros) = 8
+            expect(ctx.dimensions).toBe(8);
 
             // Garante que catálogos foram populados no retorno
             expect(ctx.products).toEqual(products);

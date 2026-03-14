@@ -63,5 +63,6 @@ userController.renderUsers({
     "id": 99,
     "name": "Josézin da Silva",
     "age": 30,
+    "gender": "masculino",
     "purchases": []
 });

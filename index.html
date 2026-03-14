@@ -23,16 +23,25 @@
                     <div class="card-body">
                         <form id="userForm">
                             <div class="row">
-                                <div class="col-md-6 mb-3">
+                                <div class="col-md-5 mb-3">
                                     <label for="userSelect" class="form-label">Select User</label>
                                     <select class="form-select" id="userSelect">
                                         <option value="">-- Select a user --</option>
                                     </select>
                                 </div>
 
-                                <div class="col-md-6 mb-3">
+                                <div class="col-md-3 mb-3">
                                     <label for="userAge" class="form-label">Age</label>
                                     <input type="number" class="form-control" id="userAge" disabled>
+                                </div>
+
+                                <div class="col-md-4 mb-3">
+                                    <label for="userGender" class="form-label">Gender</label>
+                                    <select class="form-select" id="userGender" disabled>
+                                        <option value="">--</option>
+                                        <option value="masculino">Masculino</option>
+                                        <option value="feminino">Feminino</option>
+                                    </select>
                                 </div>
                             </div>
                         </form>

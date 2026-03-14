@@ -19,6 +19,7 @@ class RecommendationEngine {
             color: 0.3,
             price: 0.2,
             age: 0.1,
+            gender: 0.2, // Novo peso para o peso do gênero na recomendação
         };
     }
 
@@ -212,36 +213,48 @@ class RecommendationEngine {
     }
 
     /**
-     * Converte um usuário em um vetor representativo baseado no seu histórico.
+     * Converte um usuário em um vetor representativo baseado no seu histórico e gênero.
      */
     encodeUser(user, context) {
+        // Cria o tensor One-Hot para o gênero do usuário
+        const genderVector = oneHotWeighted(
+            tf,
+            context.genderIndex[user.gender] ?? 0,
+            context.numGenders,
+            this.WEIGHT.gender
+        )
+
         if (user.purchases.length) {
-            // Cria um vetor médio de todos os produtos que o usuário já comprou
-            return tf.stack(
+            // Se o usuário tem compras, pegamos a média das características dos produtos que ele gosta
+            const productMeans = tf.stack(
                 user.purchases.map(
                     product => this.encodeProduct(product, context)
                 )
             )
-                .mean(0) // Tira a média dos vetores para representar o perfil de gosto do usuário
-                .reshape([
-                    1,
-                    context.dimensions
-                ])
+                .mean(0)
+
+            // Como os produtos não têm gênero (zero), substituímos a parte do gênero pelo gênero real do usuário
+            // O slice pega do início até antes das dimensões de gênero, e concatenamos com o gênero real
+            const vectorWithoutGender = productMeans.slice([0], [context.dimensions - context.numGenders])
+
+            return tf.concat1d([vectorWithoutGender, genderVector])
+                .reshape([1, context.dimensions])
         }
 
-        // Caso o usuário não possua compras (usuário novo), criamos um perfil padrão (Cold Start)
-        // O perfil é baseado inicialmente apenas na idade dele
+        // Caso o usuário não possua compras (usuário novo - Cold Start)
+        // O perfil é baseado na idade normalizada e no gênero do usuário
         return tf.concat1d([
-            tf.zeros([1]), // Preço: zero (sem histórico)
+            tf.zeros([1]), // Preço (sem histórico)
             tf.tensor1d([
                 normalize(
                     user.age,
                     context.minAge,
                     context.maxAge
                 ) * this.WEIGHT.age
-            ]), // Idade: normalizada conforme a idade informada
-            tf.zeros([context.numCategories]), // Categoria: zero (indefinido)
-            tf.zeros([context.numColors])      // Cores: zero (indefinido)
+            ]), // Idade normalizada
+            tf.zeros([context.numCategories]), // Categorias (sem histórico)
+            tf.zeros([context.numColors]),     // Cores (sem histórico)
+            genderVector                       // Gênero real do usuário (agora a IA sabe se é homem ou mulher!)
         ]).reshape([
             1,
             context.dimensions
@@ -249,43 +262,31 @@ class RecommendationEngine {
     }
 
     /**
-     * Transforma as características de um produto (preço, categoria, cor, etc.) em um vetor numérico (Embedding).
+     * Transforma as características de um produto em um vetor numérico.
+     * Note: Como os produtos não possuem gênero fixo no banco, preenchemos essa parte com zeros.
      */
     encodeProduct(product, context) {
-        // Normaliza o preço para ficar entre 0 e 1 e aplica o peso definido
+        // Normaliza preço e idade
         const price = tf.tensor1d([
-            normalize(
-                product.price,
-                context.minPrice,
-                context.maxPrice
-            ) * this.WEIGHT.price
+            normalize(product.price, context.minPrice, context.maxPrice) * this.WEIGHT.price
         ])
-
-        // Normaliza a idade média do público do produto e aplica peso
         const age = tf.tensor1d([
-            (
-                context.productAvgAgeNorm[product.name] ?? 0.5
-            ) * this.WEIGHT.age
+            (context.productAvgAgeNorm[product.name] ?? 0.5) * this.WEIGHT.age
         ])
 
-        // Converte a categoria em formato One-Hot (vetor binário) com peso
+        // One-Hot para Categoria e Cor
         const category = oneHotWeighted(
-            tf,
-            context.categoryIndex[product.category],
-            context.numCategories,
-            this.WEIGHT.category
+            tf, context.categoryIndex[product.category], context.numCategories, this.WEIGHT.category
         )
-
-        // Converte a cor em formato One-Hot com peso
         const color = oneHotWeighted(
-            tf,
-            context.colorIndex[product.color],
-            context.numColors,
-            this.WEIGHT.color
+            tf, context.colorIndex[product.color], context.numColors, this.WEIGHT.color
         )
 
-        // Concatena todas as características em um único vetor final de características
-        return tf.concat1d([price, age, category, color])
+        // Preenchemos a parte do gênero com zeros (pois produtos são neutros até serem comprados)
+        const genderPlaceholder = tf.zeros([context.numGenders])
+
+        // Concatena tudo para bater com as 'dimensions' do contexto
+        return tf.concat1d([price, age, category, color, genderPlaceholder])
     }
 }
 

@@ -10,6 +10,8 @@ export const oneHotWeighted = (tf, index, length, weight) =>
  * Prepares the Context metadata dictionary from users and products.
  */
 export function makeContext(users, products) {
+    // Extrai uma lista única de gêneros (ex: ['feminino', 'masculino'])
+    const uniqueGenders = Array.from(new Set(users.map(u => u.gender)))
     // Cria um array só com as idades de todos os usuários
     const age = users.map(u => u.age)
     // Cria um array só com os preços de todos os produtos do catálogo
@@ -38,6 +40,10 @@ export function makeContext(users, products) {
     // Exemplo: { "Eletrônicos": 0, "Vestimenta": 1 }
     const categoryIndex = Object.fromEntries(
         categories.map((category, index) => [category, index])
+    )
+    // Cria um dicionário associando cada gênero a um número (índice)
+    const genderIndex = Object.fromEntries(
+        uniqueGenders.map((gender, index) => [gender, index])
     )
     // Calcula a idade média central, somando a máxima e a mínima e dividindo por 2
     // Esse valor será usado para produtos que nunca foram comprados por ninguém
@@ -84,14 +90,18 @@ export function makeContext(users, products) {
         maxPrice,
         colorIndex,
         categoryIndex,
+        genderIndex,
         // Quantidade total de cores únicas (útil para criar tensores One-Hot Encoding)
         numColors: colors.length,
         // Quantidade total de categorias únicas
         numCategories: categories.length,
+        // Quantidade total de gêneros únicos
+        numGenders: uniqueGenders.length,
         // Quantidade total de Dimensões que o Modelo de Machine Learning vai receber como Input.
         // A lógica é: 2 dimensões 'básicas' (Idade e Preço)
-        // Mais o número de Cores possíveis (ex: 5 cores = 5 dimensões com 1 onde a cor ocorre e 0 nas outras)
-        // Mais o número de Categorias possíveis (ex: 10 categorias = 10 dimensões extras)
-        dimensions: 2 + colors.length + categories.length
+        // Mais o número de Cores possíveis
+        // Mais o número de Categorias possíveis
+        // Mais o número de Gêneros possíveis
+        dimensions: 2 + colors.length + categories.length + uniqueGenders.length
     }
 }
