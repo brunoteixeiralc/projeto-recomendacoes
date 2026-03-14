@@ -34,8 +34,9 @@ class RecommendationEngine {
         // Cria o "contexto" usando a nossa função makeContext() que extrai cálculos matemáticos da base
         const context = makeContext(users, products);
 
-        // Cria uma nova propriedade no contexto chamada productVector, mapeando cada produto pra um formato novo
-        context.productVector = products.map(product => {
+        // Pré-calcula e armazena os vetores (embeddings) de todos os produtos do catálogo.
+        // Isso otimiza a performance, pois evitaremos calcular os mesmos vetores repetidamente durante a recomendação.
+        context.productsVector = products.map(product => {
             return {
                 name: product.name,
                 meta: { ...product },
@@ -54,14 +55,54 @@ class RecommendationEngine {
         postMessage({ type: workerEvents.trainingComplete });
     }
 
+    /**
+     * Gera recomendações para um usuário específico comparando o seu perfil com todos os produtos.
+     */
     recommend(user) {
-        // Se quisermos recomendar, usaremos tranquilamente o escopo isolado desta classe ('this')
-        console.log('Will recommend for user:', user, 'using ctx:', this.globalCtx)
-        // postMessage({
-        //     type: workerEvents.recommend,
-        //     user,
-        //     recommendations: []
-        // });
+        // Verifica se o modelo já foi treinado antes de tentar recomendar
+        if (!this.model) {
+            console.error('Model not trained yet')
+            return
+        }
+
+        // Recupera o contexto global que contém os produtos pré-vetorizados
+        const context = this.globalCtx
+
+        // Converte o usuário atual em um vetor representativo (embedding)
+        const userVector = this.encodeUser(user, context).dataSync()
+
+        // Para cada produto disponível, cria uma entrada combinada: [vetor_do_usuario, vetor_do_produto]
+        const inputs = context.productsVector.map(vector => {
+            return [...userVector, ...vector.vector]
+        })
+
+        // Converte a lista de entradas em um Tensor 2D para processamento na rede neural
+        const inputTensor = tf.tensor2d(inputs)
+
+        // Realiza a predição: a rede retorna a probabilidade (score) de o usuário gostar de cada produto
+        const predictions = this.model.predict(inputTensor)
+
+        // Extrai os valores numéricos das predições
+        const score = predictions.dataSync()
+
+        // Mapeia os scores de volta para os metadados dos produtos originais
+        const recommendations = context.productsVector.map((product, index) => {
+            return {
+                ...product.meta,
+                name: product.name,
+                score: score[index] // Atribui o score de afinidade calculado
+            }
+        })
+
+        // Ordena as recomendações da maior afinidade para a menor
+        const sortedRecommendations = recommendations.sort((a, b) => b.score - a.score)
+
+        // Envia os resultados ordenados de volta para a thread principal da aplicação
+        postMessage({
+            type: workerEvents.recommend,
+            user,
+            recommendations: sortedRecommendations
+        });
     }
 
     // ============================================================================
@@ -148,8 +189,8 @@ class RecommendationEngine {
 
                 // Para cada usuário, comparamos com todos os produtos disponíveis
                 context.products.forEach(product => {
-                    // Converte o produto atual em um vetor numérico
-                    const productVector = this.encodeProduct(product, context).dataSync()
+                    // Transforma o produto em um vetor matemático para que a rede neural possa processá-lo
+                    const productsVector = this.encodeProduct(product, context).dataSync()
 
                     // Verifica se o usuário de fato comprou este produto específico
                     const label = user.purchases.some(
@@ -157,7 +198,7 @@ class RecommendationEngine {
                     )
 
                     // Combina os dois vetores em um único array de entrada e salva o rótulo
-                    inputs.push([...userVector, ...productVector])
+                    inputs.push([...userVector, ...productsVector])
                     labels.push(label)
                 })
             });
@@ -187,6 +228,24 @@ class RecommendationEngine {
                     context.dimensions
                 ])
         }
+
+        // Caso o usuário não possua compras (usuário novo), criamos um perfil padrão (Cold Start)
+        // O perfil é baseado inicialmente apenas na idade dele
+        return tf.concat1d([
+            tf.zeros([1]), // Preço: zero (sem histórico)
+            tf.tensor1d([
+                normalize(
+                    user.age,
+                    context.minAge,
+                    context.maxAge
+                ) * this.WEIGHT.age
+            ]), // Idade: normalizada conforme a idade informada
+            tf.zeros([context.numCategories]), // Categoria: zero (indefinido)
+            tf.zeros([context.numColors])      // Cores: zero (indefinido)
+        ]).reshape([
+            1,
+            context.dimensions
+        ])
     }
 
     /**
