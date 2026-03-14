@@ -19,7 +19,7 @@ class RecommendationEngine {
             color: 0.3,
             price: 0.2,
             age: 0.1,
-            gender: 0.2, // Novo peso para o peso do gênero na recomendação
+            gender: 0.5, // Novo peso para o peso do gênero na recomendação
         };
     }
 
