@@ -1,9 +1,9 @@
 <p align="center">
-  <h1 align="center">🛍️ E-commerce Recommendation System with ML</h1>
+  <h1 align="center">🛍️ Recommendation Project</h1>
 </p>
 
 <p align="center">
-  <strong>An E-commerce simulation with a built-in client-side Recommendation System using TensorFlow.js.</strong>
+  <strong>Intelligent recommendation system that personalizes the e-commerce showcase in real-time without impacting interface performance.</strong>
 </p>
 
 <p align="center">
