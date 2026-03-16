@@ -25,10 +25,12 @@ O objetivo final do modelo é rodar em um Web Worker para fazer o *One-Hot Encod
 - **Seleção de Perfil**: O usuário simula o acesso com um perfil (extraído de um `.json` de usuários) para acessar a plataforma.
 - **Histórico de Compras Tracking**: Rastreio do que o usuário clica e tenta "comprar", persistido em memória/session.
 - **Arquitetura Modular**: Implementação robusta de Controllers, Views independentes e injeção/comunicação guiada por Eventos.
-- **Isolamento de Estado (OOP)**: O Worker que treina a IA utiliza o paradigma Orientado a Objetos (`RecommendationEngine`) para evitar vazamento do escopo global.
-- **Inteligência Artificial**: Treinamento de Redes Neurais acontecendo silenciosamente em Background usando Service Workers sem travar a interface da aplicação (`src/workers/modelTrainingWorker.js`).
-- **Vector Database (Supabase)**: Integração com Supabase utilizando `pgvector` para persistência e busca de similaridade de embeddings de produtos.
-- **Segurança Pró-Ativa**: Gerenciamento de credenciais sensíveis via `src/config.js` (ignorado pelo Git) e comunicação segura com o Worker.
+- **Isolamento de Estado (OOP):** O Worker de treinamento da IA utiliza Programação Orientada a Objetos (`RecommendationEngine`) para evitar vazamento de escopo global.
+- **Inteligência Artificial:** O treinamento da rede neural ocorre silenciosamente em background usando Web Workers sem travar a interface (`src/workers/modelTrainingWorker.js`).
+- **Banco de Dados Vetorial (Supabase):** Integração com o Supabase usando `pgvector` para persistência e busca semântica de embeddings dos produtos.
+- **Internacionalização (i18n):** Suporte nativo a múltiplos idiomas (PT-BR e EN) com troca dinâmica na UI e persistência de preferência.
+- **Conversão de Moeda Dinâmica:** Conversão de preços em tempo real (USD para BRL) utilizando a **AwesomeAPI**, sincronizada com o idioma selecionado.
+- **Segurança Proativa:** Gerenciamento de credenciais sensíveis via `src/config.js` (ignorado pelo Git) e comunicação segura com o Worker.
 
 ## 🚀 Como Rodar Localmente
 
@@ -111,5 +113,9 @@ O processamento ocorre em um **Web Worker**, garantindo que a thread principal (
     *   **Usuários Antigos:** A rede usa histórico e gênero para predição.
     *   **Novos Usuários (Cold Start):** O sistema usa a idade e o sexo informados para gerar uma predição imediata.
 
-### 4. Comunicação
+### 4. Internacionalização e Moeda
+- **Tradução:** O sistema utiliza o `TranslationService` para traduzir não apenas os selos da interface, mas também os dados dinâmicos (nomes de produtos, categorias e cores).
+- **Câmbio:** O `CurrencyService` consome a AwesomeAPI para obter a cotação do dólar em tempo real, formatando os preços conforme o local (`en-US` ou `pt-BR`).
+
+### 5. Comunicação
 O Worker reporta logs de progresso e acurácia em tempo real para o console e interface através de uma ponte segura controlada pelo `WorkerController`.

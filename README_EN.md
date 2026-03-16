@@ -29,6 +29,8 @@ The model's objective is to run in a Web Worker to perform *One-Hot Encoding* on
 - **State Isolation (OOP)**: The AI training Worker uses Object-Oriented Programming (`RecommendationEngine`) to avoid global scope leaks.
 - **Artificial Intelligence**: Neural Network training happens silently in the background using Web Workers without blocking the UI (`src/workers/modelTrainingWorker.js`).
 - **Vector Database (Supabase)**: Integration with Supabase using `pgvector` for persistence and similarity search of product embeddings.
+- **Internationalization (i18n):** Native support for multiple languages (PT-BR and EN) with dynamic UI switching and preference persistence.
+- **Dynamic Currency Conversion:** Real-time price conversion (USD to BRL) using the **AwesomeAPI**, synchronized with the selected language.
 - **Proactive Security**: Sensitive credential management via `src/config.js` (Git ignored) and secure communication with the Worker.
 
 ## 🚀 How to Run Locally
@@ -110,5 +112,9 @@ Processing occurs in a **Web Worker**, ensuring the main thread (UI) never freez
     *   **Returning Users:** The network uses history and gender for predictions.
     *   **New Users (Cold Start):** Uses provided age and gender for immediate personalized predictions.
 
-### 4. Communication
+### 4. Internationalization and Currency
+- **Translation:** The system uses `TranslationService` to translate interface labels as well as dynamic data (product names, categories, and colors).
+- **Exchange Rate:** The `CurrencyService` consumes the AwesomeAPI to fetch the real-time USD exchange rate, formatting prices according to the locale (`en-US` or `pt-BR`).
+
+### 5. Communication
 The Worker reports real-time progress and accuracy logs via a secure bridge controlled by the `WorkerController`.

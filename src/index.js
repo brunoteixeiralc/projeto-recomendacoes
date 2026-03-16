@@ -12,20 +12,29 @@ import { ModelView } from './view/ModelTrainingView.js';
 import Events from './events/events.js';
 import { WorkerController } from './controller/WorkerController.js';
 import { i18n } from './service/TranslationService.js';
+import { currencyService } from './service/CurrencyService.js';
 
 // Importação das configurações globais (URL e Chave do Supabase)
 import { config } from './config.js';
 
-// 1. Inicialização do Sistema de Internacionalização (i18n)
+// 1. Inicialização do Sistema de Internacionalização (i18n) e Moeda
 await i18n.init();
+await currencyService.init();
 
-// Escuta a mudança de idioma para atualizar a página
+// Escuta a mudança de idioma para atualizar a página e a moeda
 const languageSelect = document.querySelector('#languageSelect');
-languageSelect.value = i18n.getCurrentLanguage();
+const currentLang = i18n.getCurrentLanguage();
+languageSelect.value = currentLang;
+
+// Sincroniza a moeda inicial com o idioma carregado
+currencyService.setCurrency(currentLang === 'en' ? 'USD' : 'BRL');
 
 languageSelect.addEventListener('change', async (e) => {
-    await i18n.setLanguage(e.target.value);
-    // Recarrega a página ou re-renderiza componentes principais
+    const newLang = e.target.value;
+    await i18n.setLanguage(newLang);
+    currencyService.setCurrency(newLang === 'en' ? 'USD' : 'BRL');
+    
+    // Recarrega a página para aplicar as conversões em todos os componentes
     window.location.reload(); 
 });
 

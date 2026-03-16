@@ -1,4 +1,5 @@
 import { i18n } from '../service/TranslationService.js';
+import { currencyService } from '../service/CurrencyService.js';
 import { View } from './View.js';
 
 export class ProductView extends View {
@@ -33,10 +34,11 @@ export class ProductView extends View {
         const html = products.map(product => {
             return this.replaceTemplate(this.#productTemplate, {
                 id: product.id,
-                name: product.name,
-                category: product.category,
+                name: i18n.t(product.name),
+                category: i18n.t(product.category),
                 price: product.price,
-                color: product.color,
+                formattedPrice: currencyService.format(product.price),
+                color: i18n.t(product.color),
                 product: JSON.stringify(product)
             });
         }).join('');
