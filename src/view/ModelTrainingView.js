@@ -1,3 +1,4 @@
+import { i18n } from '../service/TranslationService.js';
 import { View } from './View.js';
 
 export class ModelView extends View {
@@ -51,11 +52,11 @@ export class ModelView extends View {
     }
     updateTrainingProgress(progress) {
         this.#trainModelBtn.disabled = true;
-        this.#trainModelBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Training...';
+        this.#trainModelBtn.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> ${i18n.t('training')}`;
 
         if (progress.progress === 100) {
             this.#trainModelBtn.disabled = false;
-            this.#trainModelBtn.innerHTML = 'Train Recommendation Model';
+            this.#trainModelBtn.innerHTML = `<i class="bi bi-cpu"></i> ${i18n.t('train_recommendation_model')}`;
         }
     }
 
@@ -69,7 +70,7 @@ export class ModelView extends View {
                 <div class="user-purchase-summary">
                     <h6>${user.name} (Age: ${user.age})</h6>
                     <div class="purchases-badges">
-                        ${purchasesHtml || '<span class="text-muted">No purchases</span>'}
+                        ${purchasesHtml || `<span class="text-muted">${i18n.t('no_purchases')}</span>`}
                     </div>
                 </div>
             `;

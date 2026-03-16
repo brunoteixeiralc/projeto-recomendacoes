@@ -12,42 +12,50 @@
 
 <body>
     <div class="main">
-        <h1>E-commerce Recommendation System</h1>
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 data-i18n="app_title">E-commerce Recommendation System</h1>
+            <div class="language-selector">
+                <select id="languageSelect" class="form-select form-select-sm" style="width: auto;">
+                    <option value="pt-br">PT-BR</option>
+                    <option value="en">EN</option>
+                </select>
+            </div>
+        </div>
 
         <div class="row mt-3">
             <div class="col-md-4">
                 <div class="card mb-4">
                     <div class="card-header">
-                        <h4>User Profile</h4>
+                        <h4 data-i18n="user_profile">User Profile</h4>
                     </div>
                     <div class="card-body">
                         <form id="userForm">
                             <div class="row">
                                 <div class="col-md-5 mb-3">
-                                    <label for="userSelect" class="form-label">Select User</label>
+                                    <label for="userSelect" class="form-label" data-i18n="select_user">Select User</label>
                                     <select class="form-select" id="userSelect">
-                                        <option value="">-- Select a user --</option>
+                                        <option value="" data-i18n="select_user_default">-- Select a user --</option>
                                     </select>
                                 </div>
 
                                 <div class="col-md-3 mb-3">
-                                    <label for="userAge" class="form-label">Age</label>
+                                    <label for="userAge" class="form-label" data-i18n="age">Age</label>
                                     <input type="number" class="form-control" id="userAge" disabled>
                                 </div>
 
                                 <div class="col-md-4 mb-3">
-                                    <label for="userGender" class="form-label">Gender</label>
+                                    <label for="userGender" class="form-label" data-i18n="gender">Gender</label>
                                     <select class="form-select" id="userGender" disabled>
                                         <option value="">--</option>
-                                        <option value="masculino">Masculino</option>
-                                        <option value="feminino">Feminino</option>
+                                        <option value="masculino" data-i18n="gender_male">Masculino</option>
+                                        <option value="feminino" data-i18n="gender_female">Feminino</option>
                                     </select>
                                 </div>
                             </div>
                         </form>
 
                         <div id="pastPurchasesContainer" class="mt-4">
-                            <h5>Past Purchases</h5>
+                            <h5 data-i18n="past_purchases">Past Purchases</h5>
                             <div id="pastPurchasesList" class="row"></div>
                         </div>
                     </div>
@@ -57,15 +65,15 @@
             <div class="col-md-4">
                 <div class="card mb-4">
                     <div class="card-header">
-                        <h4>Model Training</h4>
+                        <h4 data-i18n="model_training">Model Training</h4>
                     </div>
                     <div class="card-body">
                         <div class="row">
                             <div class="model-controls d-flex gap-2">
-                                <button id="trainModelBtn" class="btn btn-primary train-model-btn">
+                                <button id="trainModelBtn" class="btn btn-primary train-model-btn" data-i18n="train_model">
                                     <i class="bi bi-cpu"></i> Train Model
                                 </button>
-                                <button disabled id="runRecommendationBtn" class="btn btn-success train-model-btn">
+                                <button disabled id="runRecommendationBtn" class="btn btn-success train-model-btn" data-i18n="run_recommendation">
                                     <i class="bi bi-cpu"></i> Run Recommendation
                                 </button>
                             </div>
@@ -73,7 +81,7 @@
 
 
                         <div class="all-users-purchases">
-                            <h5 id="purchasesDiv" style="cursor: pointer;">
+                            <h5 id="purchasesDiv" style="cursor: pointer;" data-i18n="all_users_purchase_data">
                                 All Users Purchase Data
                                 <i id="purchasesArrow" class="bi bi-chevron-down"></i>
                             </h5>
@@ -86,7 +94,7 @@
             </div>
         </div>
 
-        <h3 class="">Products</h3>
+        <h3 class="" data-i18n="products">Products</h3>
         <div class="row" id="productList">
         </div>
     </div>

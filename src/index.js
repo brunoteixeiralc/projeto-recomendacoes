@@ -11,10 +11,26 @@ import { ProductView } from './view/ProductView.js';
 import { ModelView } from './view/ModelTrainingView.js';
 import Events from './events/events.js';
 import { WorkerController } from './controller/WorkerController.js';
+import { i18n } from './service/TranslationService.js';
 
 // Importação das configurações globais (URL e Chave do Supabase)
-// Nota: O arquivo config.js é ignorado pelo Git para segurança.
 import { config } from './config.js';
+
+// 1. Inicialização do Sistema de Internacionalização (i18n)
+await i18n.init();
+
+// Escuta a mudança de idioma para atualizar a página
+const languageSelect = document.querySelector('#languageSelect');
+languageSelect.value = i18n.getCurrentLanguage();
+
+languageSelect.addEventListener('change', async (e) => {
+    await i18n.setLanguage(e.target.value);
+    // Recarrega a página ou re-renderiza componentes principais
+    window.location.reload(); 
+});
+
+// Traduz os elementos estáticos iniciais do index.html
+i18n.translatePage();
 
 // Instanciação dos serviços compartilhados (Dados)
 const userService = new UserService();
@@ -26,39 +42,39 @@ const productView = new ProductView();
 const modelView = new ModelView();
 const tfVisorView = new TFVisorView();
 
-// Inicialização do Web Worker (TensorFlow.js) para rodar processamento pesado em background
+// Inicialização do Web Worker (TensorFlow.js)
 const mlWorker = new Worker('/src/workers/modelTrainingWorker.js', { type: 'module' });
 
-// Configuração do Controller do Worker para gerenciar a comunicação
+// Configuração do Controller do Worker
 const w = WorkerController.init({
     worker: mlWorker,
     events: Events
 });
 
-// Inicializa o Supabase dentro do Worker passando as chaves de forma segura
+// Inicializa o Supabase no Worker
 w.initSupabase({
     url: config.supabaseUrl,
     key: config.supabaseKey
 });
 
-// Carrega a base de usuários padrão e dispara o primeiro treinamento automaticamente
+// Carrega a base de usuários padrão e dispara o primeiro treinamento
 const users = await userService.getDefaultUsers();
 w.triggerTrain(users);
 
-// Inicialização do Controller do Treinamento (Slider de % e Botão de Treinar)
+// Inicialização do Controller do Treinamento
 ModelController.init({
     modelView,
     userService,
     events: Events,
 });
 
-// Inicialização do Controller do TFVisor (Gráficos de Loss e Acurácia)
+// Inicialização do Controller do TFVisor
 TFVisorController.init({
     tfVisorView,
     events: Events,
 });
 
-// Inicialização do Controller de Produtos (Exibição dos Itens no Catálogo)
+// Inicialização do Controller de Produtos
 ProductController.init({
     productView,
     userService,
@@ -66,7 +82,7 @@ ProductController.init({
     events: Events,
 });
 
-// Inicialização do Controller de Usuários (Painel Lateral de Gerenciamento)
+// Inicialização do Controller de Usuários
 const userController = UserController.init({
     userView,
     userService,

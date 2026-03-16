@@ -1,3 +1,4 @@
+import { i18n } from '../service/TranslationService.js';
 import { View } from './View.js';
 
 export class ProductView extends View {
@@ -64,7 +65,7 @@ export class ProductView extends View {
                 const product = JSON.parse(button.dataset.product);
                 const originalText = button.innerHTML;
 
-                button.innerHTML = '<i class="bi bi-check-circle-fill"></i> Added';
+                button.innerHTML = `<i class="bi bi-check-circle-fill"></i> ${i18n.t('added')}`;
                 button.classList.remove('btn-primary');
                 button.classList.add('btn-success');
                 setTimeout(() => {
