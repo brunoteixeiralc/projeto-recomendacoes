@@ -27,6 +27,8 @@ O objetivo final do modelo é rodar em um Web Worker para fazer o *One-Hot Encod
 - **Arquitetura Modular**: Implementação robusta de Controllers, Views independentes e injeção/comunicação guiada por Eventos.
 - **Isolamento de Estado (OOP)**: O Worker que treina a IA utiliza o paradigma Orientado a Objetos (`RecommendationEngine`) para evitar vazamento do escopo global.
 - **Inteligência Artificial**: Treinamento de Redes Neurais acontecendo silenciosamente em Background usando Service Workers sem travar a interface da aplicação (`src/workers/modelTrainingWorker.js`).
+- **Vector Database (Supabase)**: Integração com Supabase utilizando `pgvector` para persistência e busca de similaridade de embeddings de produtos.
+- **Segurança Pró-Ativa**: Gerenciamento de credenciais sensíveis via `src/config.js` (ignorado pelo Git) e comunicação segura com o Worker.
 
 ## 🚀 Como Rodar Localmente
 
@@ -42,12 +44,16 @@ Certifique-se de ter o [Node.js](https://nodejs.org/) instalado.
    cd ecommerce-recomendations-with-ml
    ```
 
-3. Instale as dependências (Browser-sync)
+3. Instale as dependências (Browser-sync, Jest, Cross-env)
    ```bash
    npm install
    ```
 
-4. Inicie o servidor local
+4. Configuração do Supabase
+   - Crie o arquivo `src/config.js` baseado no modelo de código para incluir sua `supabaseUrl` e `supabaseKey`.
+   - Rode o script SQL de configuração disponível no banco.
+
+5. Inicie o servidor local
    ```bash
    npm start
    ```
@@ -56,7 +62,7 @@ A página será aberta automaticamente via Browser-Sync (geralmente na porta `30
 
 ## 🧪 Testes Automatizados
 
-O projeto conta com testes unitários focados na confiabilidade de funções matemáticas essenciais para a Engenharia de Features do TensorFlow, como normalização (`math.js`) e mapeamento do contexto de produtos baseados no histórico mockado (`dataProcessor.js`).
+O projeto conta com testes unitários focados na confiabilidade de funções matemáticas essenciais para a Engenharia de Features do TensorFlow, como normalização (`math.js`) e mapeamento do contexto de produtos baseados no histórico mockado (`dataProcessor.js`). Também testamos a comunicação do `WorkerController`.
 
 Para rodar a suíte de testes com **Jest**:
 
@@ -77,6 +83,7 @@ npm run test
 │   ├── utils/               # Utilitários (como dataProcessor.js e math.js)
 │   ├── view/                # Manipulação de DOM / HTML 
 │   ├── workers/             # Web Workers (Onde a classe RecommendationEngine mora)
+│   ├── config.js            # Configurações sensíveis (Ignorado pelo Git)
 │   └── index.js             # Entrypoint da Aplicação 
 ├── index.html               # Estrutura Main HTML
 ├── style.css                # Estilizacão Global
@@ -90,24 +97,19 @@ A inteligência do sistema reside no `modelTrainingWorker.js`, funcionando como 
 ### 1. Inicialização e Estrutura
 O processamento ocorre em um **Web Worker**, garantindo que a thread principal (UI) nunca trave durante cálculos pesados. A lógica é encapsulada na classe `RecommendationEngine`, que gerencia o estado do modelo e os pesos das características (Preço, Categoria, Cor e Idade).
 
-Antes do treino, o sistema realiza o pré-processamento:
-- **Carga:** Consome o catálogo de produtos e usuários.
-- **Vetorização (Embeddings):** Transforma produtos em vetores numéricos. Variáveis categóricas sofrem *One-Hot Encoding* e valores contínuos (preço/idade) são normalizados entre 0 e 1.
-- **Otimização:** Os vetores dos produtos são pré-calculados e armazenados em memória (`productsVector`) para acelerar as recomendações posteriores.
+### 2. Vetorização e Sincronização
+- **Embeddings:** Transforma produtos em vetores numéricos de 16 dimensões.
+- **Sincronização:** Após o cálculo, os vetores são enviados para o **Supabase** via `upsert`. Isso permite que o conhecimento da IA seja persistente e possa ser consultado via SQL usando busca por similaridade de cosseno (`pgvector`).
 
-### Passo a Passo da Lógica (TensorFlow.js)
-
-1.  **Inicialização do Motor:** O sistema carrega o catálogo de produtos e os perfis de usuários (com idade e sexo).
-2.  **Engenharia de Features (Vetorização):**
-    *   **Produtos:** São convertidos em vetores baseados em preço, cor, categoria e idade média dos compradores.
-    *   **Usuários:** O perfil é criado pela média dos produtos comprados **somada ao seu gênero (sexo)**.
-3.  **Rede Neural (Treinamento):** O modelo aprende a relação entre o vetor do usuário e a probabilidade de compra de cada produto.
+### 3. Passo a Passo da Lógica
+1.  **Inicialização do Motor:** O sistema carrega o catálogo de produtos e os perfis de usuários.
+2.  **Engenharia de Features:**
+    *   **Produtos:** Convertidos em vetores baseados em preço, cor, categoria e idade média.
+    *   **Usuários:** O perfil é criado pela média dos produtos comprados somada ao seu gênero.
+3.  **Rede Neural (Treinamento):** O modelo aprende a relação entre o vetor do usuário e a probabilidade de compra.
 4.  **Ciclo de Recomendação:**
-    *   **Usuários Antigos:** A rede usa o histórico e o gênero para sugerir produtos parecidos.
-    *   **Novos Usuários (Cold Start):** Em vez de recomendações genéricas, o sistema usa a **idade e o sexo** informados para gerar uma predição personalizada imediata.
-5.  **Comunicação:** Tudo roda em um Web Worker, garantindo que o site não trave durante o processamento da IA.
-atálogo simultaneamente.
-- **Ranking:** Os produtos são ordenados pelo *score* de afinidade devolvido pela IA e enviados de volta para a interface.
+    *   **Usuários Antigos:** A rede usa histórico e gênero para predição.
+    *   **Novos Usuários (Cold Start):** O sistema usa a idade e o sexo informados para gerar uma predição imediata.
 
-### 5. Comunicação Assíncrona
-O Worker utiliza um sistema de `handlers` para responder a eventos (`trainModel`, `recommend`) e reporta logs de progresso e acurácia em tempo real para o console e interface.
+### 4. Comunicação
+O Worker reporta logs de progresso e acurácia em tempo real para o console e interface através de uma ponte segura controlada pelo `WorkerController`.
